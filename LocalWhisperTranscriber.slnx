@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LocalWhisperTranscriber/LocalWhisperTranscriber.csproj" />
+  </Folder>
+  <Folder Name="/installer/">
+    <Project Path="installer/windows/LocalWhisperTranscriber.Installer.wixproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,18 @@
+<Project Sdk="WixToolset.Sdk/5.0.0">
+
+  <PropertyGroup>
+	<OutputType>Package</OutputType>
+	<ProductVersion>1.0.0</ProductVersion>
+	<Platform>x64</Platform>
+	<InstallerPlatform>x64</InstallerPlatform>
+	<!-- Path to the published app output — override via build script -->
+	<PublishDir Condition="'$(PublishDir)' == ''">..\..\artifacts\windows\app\</PublishDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<Compile Include="Product.wxs" />
+	<Compile Include="Shortcuts.wxs" />
+	<Compile Include="AppFiles.wxs" />
+  </ItemGroup>
+
+</Project>

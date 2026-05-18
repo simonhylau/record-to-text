@@ -3,6 +3,25 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+## ── LocalWhisperTranscriber project-specific rules ────────────────────────────
+
+# Build artifacts
+artifacts/windows/app/
+artifacts/windows/*.msi
+artifacts/macos/app-staging/
+artifacts/macos/pkg-staging/
+artifacts/macos/*.pkg
+
+# Native binaries (user-supplied — not committed to source control)
+src/LocalWhisperTranscriber/Native/windows/whisper-cli.exe
+src/LocalWhisperTranscriber/Native/windows/ffmpeg.exe
+src/LocalWhisperTranscriber/Native/windows/models/*.bin
+src/LocalWhisperTranscriber/Native/macos/whisper-cli
+src/LocalWhisperTranscriber/Native/macos/ffmpeg
+src/LocalWhisperTranscriber/Native/macos/models/*.bin
+
+## ──────────────────────────────────────────────────────────────────────────────
+
 # User-specific files
 *.rsuser
 *.suo

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Product.wxs — Main WiX v5 installer definition for Local Whisper Transcriber.
+
+  WiX v5 Toolset is required to build this project.
+  Install via: dotnet tool install --global wix
+  Then add the WiX SDK:  wix extension add WixToolset.UI.wixext
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+	 xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package
+	Name="Local Whisper Transcriber"
+	Manufacturer="Simon Lau"
+	Version="1.0.0"
+	UpgradeCode="A7B3C2D1-E4F5-6789-ABCD-EF0123456789"
+	Language="1033"
+	Codepage="1252"
+	InstallerVersion="500"
+	Compressed="yes"
+	Scope="perMachine">
+
+	<!-- Allow clean upgrades -->
+	<MajorUpgrade
+	  DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+	  Schedule="afterInstallInitialize" />
+
+	<!-- UI: WiX standard dialog set -->
+	<ui:WixUI Id="WixUI_InstallDir" />
+	<Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+	<!-- ── Media ─────────────────────────────────────────────────── -->
+	<MediaTemplate EmbedCab="yes" />
+
+	<!-- ── Directory structure ───────────────────────────────────── -->
+	<StandardDirectory Id="ProgramFiles64Folder">
+	  <Directory Id="COMPANYFOLDER" Name="Simon Lau">
+		<Directory Id="INSTALLFOLDER" Name="LocalWhisperTranscriber" />
+	  </Directory>
+	</StandardDirectory>
+
+	<StandardDirectory Id="ProgramMenuFolder">
+	  <Directory Id="STARTMENUFOLDER" Name="Local Whisper Transcriber" />
+	</StandardDirectory>
+
+	<StandardDirectory Id="DesktopFolder" />
+
+	<!-- ── Features ──────────────────────────────────────────────── -->
+	<Feature Id="ProductFeature" Title="Local Whisper Transcriber" Level="1">
+	  <ComponentGroupRef Id="AppFilesGroup" />
+	  <ComponentGroupRef Id="ShortcutsGroup" />
+	</Feature>
+
+  </Package>
+</Wix>

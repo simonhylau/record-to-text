@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppFiles.wxs — Harvested application files component group.
+
+  HOW TO USE:
+  ───────────
+  WiX v5 does NOT ship heat.exe. Instead, use the HarvestFiles element
+  (WixToolset.Sdk auto-harvest) or the `wix` CLI's harvest command.
+
+  Option A — Automatic HarvestFiles (recommended with WiX v5 SDK-style project):
+	Add the following inside <Project> in the .wixproj:
+
+	  <HarvestFiles
+		Id="AppFiles"
+		Directory="$(PublishDir)"
+		ComponentGroupName="AppFilesGroup"
+		DirectoryRefId="INSTALLFOLDER"
+		SuppressRootDirectory="true"
+		Subdirectory=""
+		PreprocessorVariable="var.PublishDir" />
+
+	Then DELETE this AppFiles.wxs — it will be generated automatically.
+
+  Option B — CLI harvest (for inspection / customisation):
+	wix harvest dir "artifacts\windows\app\" ^
+		-componentGroupName AppFilesGroup ^
+		-directoryRefId INSTALLFOLDER ^
+		-out installer\windows\AppFiles.wxs
+
+  Option C — Manual (kept here as a minimal working skeleton):
+	Replace the Component block below with one entry per file, or switch
+	to Option A/B above for production use.
+
+  This skeleton is intentionally left here so the project compiles even
+  before harvest is run. Replace its contents after running Option A or B.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Fragment>
+	<!--
+	  PLACEHOLDER — Replace this ComponentGroup with the output of:
+		wix harvest dir "artifacts\windows\app\" -componentGroupName AppFilesGroup ...
+	  OR enable HarvestFiles auto-harvest in the .wixproj (see comments above).
+	-->
+	<ComponentGroup Id="AppFilesGroup" Directory="INSTALLFOLDER">
+
+	  <Component Id="MainExecutable" Guid="D3E4F5A6-B7C8-9012-DEF0-123456789012">
+		<File
+		  Id="LocalWhisperTranscriberExe"
+		  Name="LocalWhisperTranscriber.exe"
+		  Source="$(var.PublishDir)LocalWhisperTranscriber.exe"
+		  KeyPath="yes" />
+	  </Component>
+
+	  <!--
+		Add additional Component entries for every DLL, resource file, and
+		native binary (whisper-cli.exe, ffmpeg.exe, model files, etc.) that
+		belongs in the install folder.
+
+		Recommended: Use auto-harvest (Option A) so you don't maintain this list by hand.
+	  -->
+
+	</ComponentGroup>
+  </Fragment>
+</Wix>
