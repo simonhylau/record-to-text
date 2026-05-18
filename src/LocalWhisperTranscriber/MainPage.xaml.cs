@@ -11,6 +11,7 @@ public partial class MainPage : ContentPage
     private readonly IWhisperService _whisper;
     private readonly AudioConversionService _audio;
     private readonly FileDialogService _fileDialog;
+    private readonly IAudioRecorderService _recorder;
 
     // ──────────────────────────────────────────────────────────────────────────
     // State
@@ -18,6 +19,11 @@ public partial class MainPage : ContentPage
     private string? _selectedAudioPath;
     private string? _lastOutputFilePath;
     private CancellationTokenSource? _cts;
+
+    // Recording state
+    private CancellationTokenSource? _recordingTimerCts;
+    private string? _micTempPath;
+    private string? _loopbackTempPath;
 
     // Output directory: user app-data/LocalWhisperTranscriber/output
     private static readonly string OutputDirectory = Path.Combine(
@@ -40,17 +46,49 @@ public partial class MainPage : ContentPage
     // ──────────────────────────────────────────────────────────────────────────
     // Constructor
     // ──────────────────────────────────────────────────────────────────────────
-    public MainPage(IWhisperService whisper, AudioConversionService audio, FileDialogService fileDialog)
+    public MainPage(IWhisperService whisper, AudioConversionService audio,
+                    FileDialogService fileDialog, IAudioRecorderService recorder)
     {
         InitializeComponent();
-        _whisper = whisper;
-        _audio = audio;
+        _whisper  = whisper;
+        _audio    = audio;
         _fileDialog = fileDialog;
+        _recorder = recorder;
 
         // Set safe defaults
-        PickerModel.SelectedIndex = 1;    // base
+        PickerModel.SelectedIndex    = 1; // base
         PickerLanguage.SelectedIndex = 0; // auto
-        PickerFormat.SelectedIndex = 0;   // txt
+        PickerFormat.SelectedIndex   = 0; // txt
+
+        // Show system-audio panel only on platforms that support loopback
+        SystemAudioPanel.IsVisible = _recorder.SupportsLoopback;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Page lifecycle
+    // ──────────────────────────────────────────────────────────────────────────
+
+    protected override async void OnAppearing()
+    {
+        base.OnAppearing();
+        await LoadInputDevicesAsync();
+    }
+
+    private async Task LoadInputDevicesAsync()
+    {
+        try
+        {
+            var devices = await _recorder.GetInputDevicesAsync();
+            PickerInputDevice.Items.Clear();
+            foreach (var d in devices)
+                PickerInputDevice.Items.Add(d);
+            if (PickerInputDevice.Items.Count > 0)
+                PickerInputDevice.SelectedIndex = 0;
+        }
+        catch
+        {
+            // If enumeration fails (e.g. permission denied), leave the picker empty
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -69,6 +107,14 @@ public partial class MainPage : ContentPage
         SetStatus("File selected. Ready to transcribe.");
     }
 
+    private async void OnRecordClicked(object sender, EventArgs e)
+    {
+        if (_recorder.IsRecording)
+            await StopRecordingAsync();
+        else
+            await StartRecordingAsync();
+    }
+
     private void OnOptionChanged(object sender, EventArgs e)
     {
         // nothing to do — options are read on Transcribe click
@@ -78,7 +124,7 @@ public partial class MainPage : ContentPage
     {
         if (string.IsNullOrEmpty(_selectedAudioPath))
         {
-            await ShowErrorAsync("Please select an audio file first.");
+            await ShowErrorAsync("Please select or record an audio file first.");
             return;
         }
 
@@ -124,6 +170,112 @@ public partial class MainPage : ContentPage
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // Recording
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private async Task StartRecordingAsync()
+    {
+        try
+        {
+            Directory.CreateDirectory(TempDirectory);
+
+            var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            _micTempPath      = Path.Combine(TempDirectory, $"rec_mic_{stamp}.wav");
+            _loopbackTempPath = null;
+
+            string? loopbackPath = null;
+            if (_recorder.SupportsLoopback && SwitchSystemAudio.IsToggled)
+            {
+                _loopbackTempPath = Path.Combine(TempDirectory, $"rec_sys_{stamp}.wav");
+                loopbackPath = _loopbackTempPath;
+            }
+
+            var deviceName = PickerInputDevice.SelectedItem as string;
+            await _recorder.StartRecordingAsync(_micTempPath, deviceName, loopbackPath);
+
+            // Update UI
+            BtnRecord.Text        = "⏹  Stop Recording";
+            BtnSelectFile.IsEnabled = false;
+            BtnTranscribe.IsEnabled = false;
+            LblSelectedFile.Text  = "Recording…";
+            LblRecordingTime.IsVisible = true;
+            SetStatus("🔴 Recording…");
+
+            // Start elapsed timer
+            _recordingTimerCts = new CancellationTokenSource();
+            _ = RunRecordingTimerAsync(_recordingTimerCts.Token);
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync($"Failed to start recording:\n{ex.Message}");
+        }
+    }
+
+    private async Task StopRecordingAsync()
+    {
+        // Stop timer
+        _recordingTimerCts?.Cancel();
+        _recordingTimerCts?.Dispose();
+        _recordingTimerCts = null;
+
+        SetStatus("Stopping recording…");
+        await _recorder.StopRecordingAsync();
+
+        // Reset recording UI
+        BtnRecord.Text          = "🔴  Record Audio";
+        BtnSelectFile.IsEnabled = true;
+        LblRecordingTime.IsVisible = false;
+
+        try
+        {
+            // Determine the final audio path (merge if loopback was captured)
+            string finalPath;
+            if (_loopbackTempPath is not null && File.Exists(_loopbackTempPath))
+            {
+                var mergedPath = Path.Combine(TempDirectory,
+                    $"rec_merged_{DateTime.Now:yyyyMMdd_HHmmss}.wav");
+                var progress = new Progress<string>(msg =>
+                    MainThread.BeginInvokeOnMainThread(() => SetStatus(msg)));
+                finalPath = await _audio.MixAudioFilesAsync(
+                    _micTempPath!, _loopbackTempPath, mergedPath, progress);
+            }
+            else
+            {
+                finalPath = _micTempPath!;
+            }
+
+            _selectedAudioPath       = finalPath;
+            LblSelectedFile.Text     = Path.GetFileName(finalPath);
+            ToolTipProperties.SetText(LblSelectedFile, finalPath);
+            BtnTranscribe.IsEnabled  = true;
+            SetStatus("✅ Recording saved. Ready to transcribe.");
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync($"Failed to finalise recording:\n{ex.Message}");
+            SetStatus("❌ Recording error.");
+        }
+    }
+
+    private async Task RunRecordingTimerAsync(CancellationToken ct)
+    {
+        var start = DateTime.UtcNow;
+        while (!ct.IsCancellationRequested)
+        {
+            try { await Task.Delay(500, ct); }
+            catch (OperationCanceledException) { break; }
+
+            var elapsed = DateTime.UtcNow - start;
+            var text = $"● {(int)elapsed.TotalMinutes:D2}:{elapsed.Seconds:D2}";
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                if (LblRecordingTime.IsVisible)
+                    LblRecordingTime.Text = text;
+            });
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // Transcription pipeline
     // ──────────────────────────────────────────────────────────────────────────
 
@@ -148,12 +300,12 @@ public partial class MainPage : ContentPage
             // 2. Build options
             var options = new TranscriptionOptions
             {
-                AudioFilePath  = wavPath,
-                Model          = SelectedModel(),
-                Language       = SelectedLanguageCode(),
-                OutputFormat   = SelectedFormat(),
+                AudioFilePath   = wavPath,
+                Model           = SelectedModel(),
+                Language        = SelectedLanguageCode(),
+                OutputFormat    = SelectedFormat(),
                 OutputDirectory = OutputDirectory,
-                OutputBaseName = $"transcript_{DateTime.Now:yyyyMMdd_HHmmss}"
+                OutputBaseName  = $"transcript_{DateTime.Now:yyyyMMdd_HHmmss}"
             };
 
             // 3. Transcribe
@@ -163,8 +315,8 @@ public partial class MainPage : ContentPage
             if (result.Success)
             {
                 EditorTranscript.Text = result.Text;
-                _lastOutputFilePath = result.OutputFilePath;
-                BtnSave.IsEnabled = true;
+                _lastOutputFilePath   = result.OutputFilePath;
+                BtnSave.IsEnabled     = true;
                 SetStatus($"✅ Done in {result.ElapsedMilliseconds / 1000.0:F1}s" +
                           (result.OutputFilePath is not null
                               ? $"  →  {Path.GetFileName(result.OutputFilePath)}"
@@ -228,7 +380,8 @@ public partial class MainPage : ContentPage
             BusyIndicator.IsVisible = busy;
             BtnTranscribe.IsEnabled = !busy;
             BtnSelectFile.IsEnabled = !busy;
-            BtnCancel.IsVisible = busy;
+            BtnRecord.IsEnabled     = !busy;
+            BtnCancel.IsVisible     = busy;
         });
     }
 

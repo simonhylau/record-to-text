@@ -20,6 +20,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IWhisperService, WhisperCppService>();
         builder.Services.AddSingleton<AudioConversionService>();
         builder.Services.AddSingleton<FileDialogService>();
+        builder.Services.AddSingleton<IAudioRecorderService, AudioRecorderService>();
         builder.Services.AddTransient<MainPage>();
 
 #if DEBUG

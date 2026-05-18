@@ -132,6 +132,69 @@ public class AudioConversionService
         return outputPath;
     }
 
+    /// <summary>
+    /// Mixes two mono 16 kHz WAV files into a single output WAV using ffmpeg's amix filter.
+    /// </summary>
+    public async Task<string> MixAudioFilesAsync(
+        string pathA,
+        string pathB,
+        string outputPath,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var ffmpeg = FindFfmpegPath()
+            ?? throw new FileNotFoundException(
+                $"ffmpeg executable not found. Place '{FfmpegName}' in the app folder or Native/{NativeSubfolder}/.");
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            EnsureExecutable(ffmpeg);
+
+        if (File.Exists(outputPath)) File.Delete(outputPath);
+
+        progress?.Report("Mixing microphone and system audio…");
+
+        var stdErr = new StringBuilder();
+        var psi = new ProcessStartInfo
+        {
+            FileName = ffmpeg,
+            Arguments = $"-y -i \"{pathA}\" -i \"{pathB}\" " +
+                        $"-filter_complex \"[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0\" " +
+                        $"-ar 16000 -ac 1 -c:a pcm_s16le \"{outputPath}\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process { StartInfo = psi };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+                stdErr.AppendLine(e.Data);
+        };
+
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { /* ignore */ }
+            throw new OperationCanceledException("Audio mixing was cancelled.");
+        }
+
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"ffmpeg mix failed (exit code {process.ExitCode}):\n{stdErr}");
+
+        if (!File.Exists(outputPath))
+            throw new InvalidOperationException("ffmpeg reported success but mixed output file was not created.");
+
+        progress?.Report("Audio mixing complete.");
+        return outputPath;
+    }
+
     private static void EnsureExecutable(string path)
     {
         try

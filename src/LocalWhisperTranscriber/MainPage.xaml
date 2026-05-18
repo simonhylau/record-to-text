@@ -20,16 +20,23 @@
                    TextColor="{AppThemeBinding Light=#6E6E73, Dark=#98989D}"
                    Margin="0,0,0,24" />
 
-            <!-- ═══════════════════ AUDIO FILE ═══════════════════ -->
+            <!-- ═══════════════════ AUDIO INPUT ═══════════════════ -->
             <Frame BackgroundColor="{AppThemeBinding Light=White, Dark=#2C2C2E}"
                    Padding="16" Margin="0,0,0,16" CornerRadius="12">
                 <VerticalStackLayout Spacing="10">
-                    <Label Text="Audio File" FontSize="13" FontAttributes="Bold"
+                    <Label Text="Audio Input" FontSize="13" FontAttributes="Bold"
                            TextColor="{AppThemeBinding Light=#6E6E73, Dark=#98989D}" />
+
+                    <!-- Upload + Record buttons -->
                     <HorizontalStackLayout Spacing="10">
                         <Button x:Name="BtnSelectFile"
-                                Text="Select Audio File"
+                                Text="📂  Upload Audio"
                                 Clicked="OnSelectFileClicked"
+                                HorizontalOptions="Start" />
+                        <Button x:Name="BtnRecord"
+                                Text="🔴  Record Audio"
+                                Clicked="OnRecordClicked"
+                                Style="{StaticResource SecondaryButton}"
                                 HorizontalOptions="Start" />
                         <Label x:Name="LblSelectedFile"
                                Text="No file selected"
@@ -37,8 +44,35 @@
                                TextColor="{AppThemeBinding Light=#6E6E73, Dark=#98989D}"
                                FontSize="13"
                                LineBreakMode="MiddleTruncation"
-                               MaximumWidthRequest="500" />
+                               MaximumWidthRequest="400" />
+                        <Label x:Name="LblRecordingTime"
+                               Text="● 00:00"
+                               IsVisible="False"
+                               VerticalOptions="Center"
+                               TextColor="#FF3B30"
+                               FontSize="13"
+                               FontAttributes="Bold" />
                     </HorizontalStackLayout>
+
+                    <!-- Input device + system audio row -->
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                        <VerticalStackLayout Grid.Column="0" Spacing="4">
+                            <Label Text="Input Device" FontSize="12"
+                                   TextColor="{AppThemeBinding Light=#6E6E73, Dark=#98989D}" />
+                            <Picker x:Name="PickerInputDevice" Title="Default microphone" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout Grid.Column="1" Spacing="4"
+                                             x:Name="SystemAudioPanel"
+                                             IsVisible="False"
+                                             VerticalOptions="End">
+                            <Label Text="Include System Audio" FontSize="12"
+                                   TextColor="{AppThemeBinding Light=#6E6E73, Dark=#98989D}"
+                                   HorizontalOptions="Center" />
+                            <Switch x:Name="SwitchSystemAudio"
+                                    HorizontalOptions="Center" />
+                        </VerticalStackLayout>
+                    </Grid>
                 </VerticalStackLayout>
             </Frame>
 
