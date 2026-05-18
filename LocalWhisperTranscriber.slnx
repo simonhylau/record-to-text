@@ -4,5 +4,8 @@
   </Folder>
   <Folder Name="/installer/">
     <Project Path="installer/windows/LocalWhisperTranscriber.Installer.wixproj" />
+    <Project Path="LocalTranscriberInstaller/LocalTranscriberInstaller.vdproj" Type="Installer">
+      <Build />
+    </Project>
   </Folder>
 </Solution>

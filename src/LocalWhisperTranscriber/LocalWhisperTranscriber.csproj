@@ -4,7 +4,7 @@
 	<ApplicationTitle>Local Whisper Transcriber</ApplicationTitle>
 	<RootNamespace>LocalWhisperTranscriber</RootNamespace>
 	<AssemblyName>LocalWhisperTranscriber</AssemblyName>
-	<OutputType>Exe</OutputType>
+	<OutputType>WinExe</OutputType>
 	<TargetFrameworks>net10.0-maccatalyst;net10.0-windows10.0.19041.0</TargetFrameworks>
 	<UseMaui>true</UseMaui>
 	<SingleProject>true</SingleProject>
