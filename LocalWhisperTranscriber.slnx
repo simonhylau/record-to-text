@@ -1,4 +1,4 @@
-<Solution>
+﻿<Solution>`r`n  <Folder Name="/AudioTranscriber/">`r`n    <Project Path="AudioTranscriber/AudioTranscriber.csproj" />`r`n  </Folder>
   <Folder Name="/src/">
     <Project Path="src/LocalWhisperTranscriber/LocalWhisperTranscriber.csproj" />
   </Folder>
@@ -9,3 +9,4 @@
     </Project>
   </Folder>
 </Solution>
+
