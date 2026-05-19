@@ -446,3 +446,8 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Large binaries - exceed GitHub 100 MB limit
+AudioTranscriber/CLI/ffmpeg.exe
+AudioTranscriber/CLI/models/*.bin
+

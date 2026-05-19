@@ -9,16 +9,17 @@
 
 1. [What the app does](#what-the-app-does)
 2. [Solution structure](#solution-structure)
-3. [Running in Visual Studio](#running-in-visual-studio)
-4. [Adding whisper.cpp binaries](#adding-whispercpp-binaries)
-5. [Adding ffmpeg binaries](#adding-ffmpeg-binaries)
-6. [Adding model files](#adding-model-files)
-7. [Windows build](#windows-build)
-8. [Windows MSI build](#windows-msi-build)
-9. [macOS build](#macos-build)
-10. [macOS signing requirements](#macos-signing-requirements)
-11. [Known limitations](#known-limitations)
-12. [Troubleshooting](#troubleshooting)
+3. [AudioTranscriber (WinForms)](#audiotranscriber-winforms)
+4. [Running in Visual Studio](#running-in-visual-studio)
+5. [Adding whisper.cpp binaries](#adding-whispercpp-binaries)
+6. [Adding ffmpeg binaries](#adding-ffmpeg-binaries)
+7. [Adding model files](#adding-model-files)
+8. [Windows build](#windows-build)
+9. [Windows MSI build](#windows-msi-build)
+10. [macOS build](#macos-build)
+11. [macOS signing requirements](#macos-signing-requirements)
+12. [Known limitations](#known-limitations)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -43,10 +44,18 @@ All audio stays on your device. Nothing is sent over the network.
 ## Solution structure
 
 ```
-LocalWhisperTranscriber.sln
+LocalWhisperTranscriber.slnx
+├── AudioTranscriber/                            ← WinForms recorder + transcriber (.NET Framework 4.8)
+│   ├── MainForm.cs / MainForm.Designer.cs
+│   ├── Program.cs
+│   ├── Resource/
+│   │   ├── Record.png                           ← button icon (idle)
+│   │   └── Stop.png                             ← button icon (recording)
+│   └── CLI/                                     ← place whisper-cli.exe + DLLs here (gitignored binaries)
+│       └── models/                              ← place ggml-*.bin here (gitignored)
 ├── src/
 │   └── LocalWhisperTranscriber/
-│       ├── LocalWhisperTranscriber.csproj   # MAUI multi-target project
+│       ├── LocalWhisperTranscriber.csproj       ← MAUI multi-target project (.NET 10)
 │       ├── MauiProgram.cs
 │       ├── App.xaml / App.xaml.cs
 │       ├── AppShell.xaml / AppShell.xaml.cs
@@ -61,16 +70,171 @@ LocalWhisperTranscriber.sln
 │       │   ├── FileDialogService.cs
 │       │   └── FileSaveDialogHelper.Windows.cs
 │       ├── Native/
-│       │   ├── windows/        ← place whisper-cli.exe, ffmpeg.exe, models/ here
-│       │   └── macos/          ← place whisper-cli, ffmpeg, models/ here
+│       │   ├── windows/                         ← place whisper-cli.exe, ffmpeg.exe, models/ here
+│       │   └── macos/                           ← place whisper-cli, ffmpeg, models/ here
 │       └── Resources/
-├── installer/
-│   └── windows/                ← WiX v5 MSI project
+├── LocalTranscriberInstaller/                   ← VS Setup Project (.msi)
 ├── build/
 │   ├── build-windows.ps1
 │   └── build-macos.sh
-└── artifacts/                  ← generated build output (gitignored)
+└── artifacts/                                   ← generated build output (gitignored)
 ```
+
+---
+
+## AudioTranscriber (WinForms)
+
+**AudioTranscriber** is a lightweight Windows-only (.NET Framework 4.8) WinForms app that records microphone input and system audio output simultaneously, then transcribes the recording fully offline using **whisper.cpp**.
+
+### Features
+
+- 🎙️ **Records all microphone devices** — captures every active input device at once (44.1 kHz mono WAV per device).
+- 🔊 **Records system audio output** — uses WASAPI loopback to capture what is playing through each active render endpoint.
+- ⚠️ **No microphone? No problem** — if no microphone is detected the status bar notifies you and recording continues on system audio only.
+- 🔀 **Mixes all sources** — all captured streams are resampled to 16 kHz mono and mixed into a single WAV before transcription.
+- ✂️ **Chunked transcription** — the mixed WAV is split into 30-second segments (whisper.cpp's optimal context window) and transcribed in parallel.
+- ⚡ **Parallel processing** — up to `ProcessorCount ÷ 2` whisper-cli processes run concurrently to speed up long recordings.
+- 🖼️ **Image button UI** — the record button shows `Record.png` at rest and switches to `Stop.png` while recording; both images are scaled to fill the button width while preserving aspect ratio.
+- ⏱️ **Live recording timer** — elapsed time updates every 500 ms in the status area while recording.
+- 📋 **Transcription progress** — the status bar shows `Transcribing chunk N/Total...` for each chunk as it completes.
+- 🛠️ **Whisper stderr surfaced** — if whisper-cli exits with an error the stderr output is shown directly in the transcript text box instead of silently returning nothing.
+
+---
+
+### How it works
+
+```
+Click Record
+    │
+    ├── Start WaveInEvent for every microphone    (44.1 kHz mono WAV)
+    └── Start WasapiLoopbackCapture for every     (native format WAV)
+        active render endpoint
+
+Click Stop
+    │
+    ├── Stop & flush all captures
+    ├── MixToWav() — resample all streams to 16 kHz mono, mix together
+    ├── SplitWavToChunks() — split mixed WAV into 30-second chunks
+    └── TranscribeAsync()
+            └── whisper-cli.exe -m <model> -f <chunk> -l auto -otxt
+                    (up to ProcessorCount÷2 running in parallel)
+            └── Concatenate chunk transcripts in order → display
+```
+
+---
+
+### Required files
+
+These files are **not included in the repository** (they exceed GitHub's 100 MB file limit) and must be placed manually before running the app.
+
+| File | Place at | Size | Required |
+|------|----------|------|----------|
+| `whisper-cli.exe` | `AudioTranscriber/CLI/whisper-cli.exe` | ~5 MB | ✅ Yes |
+| `whisper.dll` | `AudioTranscriber/CLI/whisper.dll` | — | ✅ Yes (ships with whisper-cli) |
+| `ggml.dll` + `ggml-*.dll` | `AudioTranscriber/CLI/` | — | ✅ Yes (ships with whisper-cli) |
+| `ggml-base.bin` _(or any model)_ | `AudioTranscriber/CLI/models/ggml-base.bin` | ~142 MB | ✅ Yes (at least one) |
+| `ffmpeg.exe` | `AudioTranscriber/CLI/ffmpeg.exe` | ~215 MB | ⚠️ Optional |
+
+> The app displays `[Error: whisper-cli not found]` or `[Error: whisper model not found]` in the transcript box if either required file is missing.
+
+---
+
+### Downloading whisper-cli.exe
+
+**Option A — Pre-built release (easiest)**
+
+1. Go to **https://github.com/ggerganov/whisper.cpp/releases**
+2. Download the latest **Windows x64** ZIP (e.g. `whisper-cpp-binaries-windows-x64.zip`).
+3. Extract and copy `whisper-cli.exe`, `whisper.dll`, `ggml.dll`, `ggml-base.dll`, `ggml-cpu.dll` into `AudioTranscriber/CLI/`.
+
+**Option B — Build from source**
+
+```powershell
+git clone https://github.com/ggerganov/whisper.cpp
+cd whisper.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+copy build\Release\whisper-cli.exe ..\AudioTranscriber\CLI\
+copy build\Release\*.dll           ..\AudioTranscriber\CLI\
+```
+
+---
+
+### Downloading a Whisper model
+
+Place at least one `.bin` model file in `AudioTranscriber/CLI/models/`. The app automatically picks the **first** `ggml-*.bin` file it finds in that folder.
+
+| Model | File | Size | Notes |
+|-------|------|------|-------|
+| Tiny | `ggml-tiny.bin` | 75 MB | Fastest; lower accuracy |
+| Base | `ggml-base.bin` | 142 MB | **Recommended** — good balance |
+| Base EN | `ggml-base.en.bin` | 142 MB | English only; slightly faster |
+| Small | `ggml-small.bin` | 466 MB | Higher accuracy; slower |
+
+**Direct download links (Hugging Face):**
+
+```
+https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin
+```
+
+**PowerShell one-liner (base model):**
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin" `
+  -OutFile "AudioTranscriber\CLI\models\ggml-base.bin"
+```
+
+---
+
+### Downloading ffmpeg.exe (optional)
+
+`ffmpeg.exe` is present in the CLI folder for potential future use but is **not called** by the current transcription pipeline.
+
+1. Go to **https://www.gyan.dev/ffmpeg/builds/**
+2. Download the **ffmpeg-release-essentials** ZIP.
+3. Extract `bin/ffmpeg.exe` into `AudioTranscriber/CLI/`.
+
+---
+
+### Folder structure after setup
+
+```
+AudioTranscriber/
+├── Resource/
+│   ├── Record.png          ← button icon (idle state)
+│   └── Stop.png            ← button icon (recording state)
+└── CLI/
+    ├── whisper-cli.exe     ← required
+    ├── whisper.dll         ← required (bundled with whisper-cli)
+    ├── ggml.dll            ← required (bundled with whisper-cli)
+    ├── ggml-base.dll       ← required (bundled with whisper-cli)
+    ├── ggml-cpu.dll        ← required (bundled with whisper-cli)
+    ├── ffmpeg.exe          ← optional
+    └── models/
+        └── ggml-base.bin   ← required (or any other ggml-*.bin)
+```
+
+---
+
+### Status bar messages reference
+
+| Message | Meaning |
+|---------|---------|
+| `Ready` | Idle, waiting to record |
+| `Recording...` | Capture started on all devices |
+| `Recording N input(s) and N output(s)...` | Active device count |
+| `No microphone found. Recording system audio only...` | No mic detected; loopback still active |
+| `Stopping capture...` | Flushing audio writers |
+| `Mixing audio...` | Resampling and merging all streams |
+| `Transcribing chunk N/Total...` | Parallel whisper-cli progress |
+| `Done.` | Transcript ready |
+| `[Error: whisper-cli not found]` | `CLI/whisper-cli.exe` is missing |
+| `[Error: whisper model not found]` | No `ggml-*.bin` found in `CLI/models/` |
+| `[whisper error: ...]` | whisper-cli exited non-zero; stderr shown inline |
 
 ---
 
@@ -301,3 +465,6 @@ on first run and sets execute permissions there.
 | App does not launch on macOS | Run `sudo xattr -rd com.apple.quarantine LocalWhisperTranscriber.app` in Terminal. |
 | MSI build fails with "component not found" | Harvest app files first; see [Windows MSI build](#windows-msi-build). |
 | Build error: `MauiVersion property not set` | Ensure .NET MAUI workload is installed: `dotnet workload install maui-windows`. |
+| AudioTranscriber shows `[Error: whisper-cli not found]` | Copy `whisper-cli.exe` into `AudioTranscriber/CLI/`. See [AudioTranscriber setup](#audiotranscriber-winforms). |
+| AudioTranscriber shows `[Error: whisper model not found]` | Download a `ggml-*.bin` model and place it in `AudioTranscriber/CLI/models/`. See [Downloading a Whisper model](#downloading-a-whisper-model). |
+| AudioTranscriber transcript is empty | Check that `whisper-cli.exe` and `ggml-*.bin` are both present and the recorded WAV contains audio. |
